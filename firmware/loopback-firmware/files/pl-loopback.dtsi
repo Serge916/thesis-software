@@ -1,0 +1,46 @@
+/ {
+    /* Add dma_proxy under amba */
+//    fragment@0 {
+//        target = <&amba>;
+//        __overlay__ {
+//            dma_proxy {
+//                compatible = "xlnx,dma_proxy";
+//                dmas = <&axi_dma_0 0 &axi_dma_0 1>;
+//                dma-names = "dma_proxy_tx", "dma_proxy_rx";
+//            };
+//        };
+//    };
+
+    /* Add udmabuf nodes at the root */
+    fragment@3 {
+        target-path = "/";
+        __overlay__ {
+            udmabuf0: udmabuf@0 {
+                compatible = "ikwzm,u-dma-buf";
+                device-name = "udmabuf0";
+                minor-number = <0>;
+                size = <0x800>;
+                sync-mode = <1>;
+                sync-always;
+            };
+
+            udmabuf1: udmabuf@1 {
+                compatible = "ikwzm,u-dma-buf";
+                device-name = "udmabuf1";
+                minor-number = <1>;
+                size = <0x800>;
+                sync-mode = <1>;
+                sync-always;
+            };
+        };
+    };
+
+    /* Modify existing axi_dma_0 node */
+//    fragment@4 {
+//        target-path = "/axi/dma@a0000000";
+//        __overlay__ {
+//            compatible = "generic-uio";
+//        };
+//    };
+};
+
