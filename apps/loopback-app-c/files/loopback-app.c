@@ -112,6 +112,11 @@ int main(int argc, char *argv[])
 	}
 
 	transmission_bytes = atoi(argv[1]);
+	if (transmission_bytes < 0)
+	{
+		printf("Provide a valid value, i.e. greater than 0\n");
+		exit(1);
+	}
 
 	read_file_u64("/sys/class/u-dma-buf/udmabuf0/phys_addr", &phy_src_addr, "%x");
 	read_file_u64("/sys/class/u-dma-buf/udmabuf1/phys_addr", &phy_dest_addr, "%x");
