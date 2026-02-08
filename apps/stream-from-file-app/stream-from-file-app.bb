@@ -9,6 +9,10 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 
 SRC_URI = "file://stream-from-file-app.c \
 	   file://Makefile \
+	   file://dma-api.c \
+	   file://dma-api.h \
+	   file://helper.h \
+	   file://helper.c \
 		  "
 
 S = "${WORKDIR}"

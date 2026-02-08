@@ -11,6 +11,7 @@
 #include <stdbool.h>
 
 #include "dma-api.h"
+#include "helper.h"
 
 // Private helper functions
 static inline void reg_write32(volatile uint8_t *regs, uint32_t off, uint32_t val)
@@ -60,13 +61,6 @@ static int read_file_u32(const char *path, uint32_t *content, const char *format
     return 0;
 }
 
-// Public helper functions
-void sleep_ms(int milliseconds)
-{
-    // Convert milliseconds to microseconds
-    usleep(milliseconds * 1000);
-}
-
 // Public methods
 int DmaInit();
 
@@ -106,12 +100,12 @@ void setDmaChannelAddress(volatile uint8_t const *reg_map, size_t buffer_index, 
 {
     uint32_t offset, address_lsb, address_msb;
     address_lsb = (uint32_t)(phy_address & 0xFFFFFFFF);
-    address_msb = (uint32_t)((phy_address >> 32) & 0xFFFFFFFF);
+    address_msb = (uint32_t)((phy_address & (0xFFFFFFFF << 32)) >> 32);
 
     offset = (buffer_index == SRC_BUF_ID) ? MM2S_SRC_ADDR : S2MM_DEST_ADDR;
-    reg_write32(reg_map, offset, phy_address);
+    reg_write32(reg_map, offset, address_lsb);
     offset = (buffer_index == SRC_BUF_ID) ? MM2S_SRC_ADDR_MSB : S2MM_DEST_ADDR_MSB;
-    reg_write32(reg_map, offset, phy_address);
+    reg_write32(reg_map, offset, address_msb);
 }
 
 void setDmaTransmissionLength(volatile uint8_t const *reg_map, size_t buffer_index, uint32_t transmission_bytes)
@@ -121,7 +115,7 @@ void setDmaTransmissionLength(volatile uint8_t const *reg_map, size_t buffer_ind
     reg_write32(reg_map, offset, transmission_bytes);
 }
 
-void waitDmaTransmissionDone(volatile uint8_t *regs, size_t buffer_index, uint8_t timeout_ms)
+int waitDmaTransmissionDone(volatile uint8_t *regs, size_t buffer_index, uint8_t timeout_ms)
 {
     uint32_t sr_off = (buffer_index == SRC_BUF_ID) ? MM2S_STATUS : S2MM_STATUS;
     for (;;)
@@ -130,17 +124,17 @@ void waitDmaTransmissionDone(volatile uint8_t *regs, size_t buffer_index, uint8_
 
         if (sr & DMA_STATUS_IDLE)
         {
-            return;
+            return DMA_RECEIVED;
         }
         if (sr & DMA_STATUS_ERR_IRQ)
         {
             fprintf(stderr, "DMA error: status @ 0x%08x = 0x%08x\n", sr_off, sr);
-            exit(1);
+            return DMA_FAILED;
         }
         if (timeout_ms == 0)
         {
-            fprintf(stderr, "Timeout waiting for DMA idle: status @ 0x%08x = 0x%08x\n", sr_off, sr);
-            exit(1);
+            // fprintf(stderr, "Timeout waiting for DMA idle: status @ 0x%08x = 0x%08x\n", sr_off, sr);
+            return DMA_TIMEOUT;
         }
         // ~1ms poll interval
         timeout_ms--;

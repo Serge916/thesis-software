@@ -11,6 +11,7 @@
 #include <stdbool.h>
 
 #include "dma-api.h"
+#include "helper.h"
 
 int main(int argc, char *argv[])
 {
@@ -18,24 +19,37 @@ int main(int argc, char *argv[])
     const char *udmabuf1_dev = "/dev/udmabuf1";
     const char *uio_dev = "/dev/uio4";
 
+    FILE *input_file_handle;
+
     uint64_t phy_src_addr, phy_dest_addr;
     uint32_t size_src_buf, size_dest_buf;
     int fd_buf0, fd_buf1;
     uint8_t *src_buf, *dest_buf;
     volatile uint8_t *reg_map;
 
-    size_t transmission_bytes;
+    // 2048B is 128 lines, i.e. 2048/16.
+    char line_buf[16];
+    // 128 lines is 1024B, i.e. 128*8
+    size_t transmission_bytes = 1024;
+    size_t network_trigger_counter = 0;
+
+    uint64_t lineno = 0;
+    bool finished_operation = false;
+    bool finished_transmitting = false;
+    bool transmit_slot_available = true;
+    uint64_t frames_received = 0;
 
     if (argc != 2)
     {
-        printf("Invalid use. Function expects: loopback-app <transmission size in Bytes>\n");
+        printf("Invalid use. Function expects: stream-from-file <path to input file>\n");
         exit(1);
     }
 
-    transmission_bytes = atoi(argv[1]);
-    if (transmission_bytes < 0)
+    input_file_handle = fopen(argv[1], "r");
+    if (!input_file_handle)
     {
-        printf("Provide a valid value, i.e. greater than 0\n");
+        fprintf(stderr, "fopen: %s\n", strerror(errno));
+        printf("Provide a valid value, i.e. path to input file\n");
         exit(1);
     }
 
@@ -49,15 +63,9 @@ int main(int argc, char *argv[])
     printf("Buffer sizes are:\nSource: %d B, Destination: %d B\n",
            size_src_buf, size_dest_buf);
 
-    if ((phy_dest_addr > UINT32_MAX) || (phy_src_addr > UINT32_MAX) || (phy_src_addr == NULL) || (phy_dest_addr == NULL))
+    if ((phy_src_addr == NULL) || (phy_dest_addr == NULL))
     {
-        fprintf(stderr, "64 bit addresses are not supported by this binary.\n");
-        exit(1);
-    }
-
-    if (transmission_bytes > size_src_buf || transmission_bytes > size_dest_buf)
-    {
-        fprintf(stderr, "Transmission too large for buffers\n");
+        fprintf(stderr, "Failed to get a valid address.\n");
         exit(1);
     }
 
@@ -119,12 +127,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Fill source with data
-    for (size_t i = 0; i < transmission_bytes; i++)
-    {
-        src_buf[i] = i % 256;
-    }
-
+    // Prepare DMAs
     // Reset DMA channels
     resetDmaChannel(reg_map, SRC_BUF_ID);
     resetDmaChannel(reg_map, DEST_BUF_ID);
@@ -132,49 +135,108 @@ int main(int argc, char *argv[])
     sleep_ms(10);
     // Start receive channel not to fill the buffer
     startDmaChannel(reg_map, DEST_BUF_ID);
-    // Write destination address
-    setDmaChannelAddress(reg_map, DEST_BUF_ID, phy_dest_addr);
     // Start transmit channel
     startDmaChannel(reg_map, SRC_BUF_ID);
+    // Write destination address
+    setDmaChannelAddress(reg_map, DEST_BUF_ID, phy_dest_addr);
     // Set source address
     setDmaChannelAddress(reg_map, SRC_BUF_ID, phy_src_addr);
+    // Trigger receive DMA
+    printf("Receive DMA channel triggered\n");
+    setDmaTransmissionLength(reg_map, DEST_BUF_ID, FRAME_SIZE_IN_BYTES);
+
+    while (!finished_operation)
+    {
+        size_t lines_read = 0;
+        uint8_t bytes[BYTES_PER_LINE];
+
+        // Fill a chunk with up to 128 parsed lines
+        while (lines_read < LINES_PER_CHUNK && !finished_transmitting && transmit_slot_available)
+        {
+            int r = readNextLine(input_file_handle, line_buf, &lineno);
+            if (r == 0)
+            {
+                finished_transmitting = true;
+                printf("INFO: Finished sending events\n");
+                break; // EOF
+            }
+
+            if (r < 0)
+            { // parse error
+                fprintf(stderr, "Parse error. result < 0, lineno: %d\n", lineno);
+                finished_transmitting = true;
+                break;
+            }
+            // printf("DEBUG: Read line %d, %s\n", lineno, line_buf);
+            if (parseLine(line_buf, bytes) != 0)
+            {
+                fprintf(stderr, "Line %d: invalid hex digit\n", lineno);
+                finished_transmitting = true;
+                break;
+            }
+            // printf("Line %d parsed,", lineno);
+            for (size_t i = 0; i < BYTES_PER_LINE - 1; i++)
+            {
+                printf(" %02x", bytes[i]);
+            }
+            printf(" %02x\n", bytes[BYTES_PER_LINE - 1]);
+
+            lines_read++;
+        }
+        // Copy into the DMA source buffer
+        if (lines_read > 0)
+        {
+            memcpy(&src_buf[lines_read * BYTES_PER_LINE], bytes, BYTES_PER_LINE);
+            printf("DEBUG: Line %d copied\n", lineno);
+            transmit_slot_available = false;
+            setDmaTransmissionLength(reg_map, SRC_BUF_ID, transmission_bytes);
+            printf("DEBUG: Transmit DMA channel triggered\n");
+        }
+
+        // if (lines_read == 0 && !finished_transmitting)
+        // {
+        //     // No more data (EOF reached before any new lines for this chunk)
+        //     finished_transmitting = true;
+        //     break;
+        // }
+
+        // Poll DMA channels
+        if (waitDmaTransmissionDone(reg_map, DEST_BUF_ID, 10) == DMA_RECEIVED)
+        {
+            // Update destination address
+            frames_received++;
+            frames_received %= 8;
+
+            // Enough frames for one forwarding
+            if (frames_received == 0)
+            {
+                network_trigger_counter++;
+            }
+            // Update destination address
+            setDmaChannelAddress(reg_map, DEST_BUF_ID, (phy_dest_addr + frames_received * FRAME_SIZE_IN_BYTES));
+        }
+
+        if (!transmit_slot_available)
+        {
+            if (waitDmaTransmissionDone(reg_map, SRC_BUF_ID, 10) == DMA_RECEIVED)
+            {
+                // One more transmission
+                printf("Transmit DMA channel finished\n");
+                transmit_slot_available = true;
+            }
+        }
+    }
+
     // Trigger DMA channels
-    setDmaTransmissionLength(reg_map, DEST_BUF_ID, transmission_bytes);
-    setDmaTransmissionLength(reg_map, SRC_BUF_ID, transmission_bytes);
     // Wait for finished transaction
-    waitDmaTransmissionDone(reg_map, SRC_BUF_ID, 10);
-    waitDmaTransmissionDone(reg_map, DEST_BUF_ID, 10);
-
-    // Check whether they match
-    bool ok = true;
-    printf("TX: [");
-    for (size_t i = 0; i < transmission_bytes - 1; i++)
-    {
-        printf("%u, ", src_buf[i]);
-    }
-    printf("%u]\n", src_buf[transmission_bytes - 1]);
-
-    printf("RX: [");
-    for (size_t i = 0; i < transmission_bytes - 1; i++)
-    {
-        printf("%u, ", dest_buf[i]);
-        if (dest_buf[i] != src_buf[i])
-            ok = false;
-    }
-    printf("%u]\n", dest_buf[transmission_bytes - 1]);
-
-    if (!ok)
-    {
-        fprintf(stderr, "Mismatch! Check FIFO wiring, DMA mode, cache sync, and addresses.\n");
-        // fall through to cleanup, but return non-zero
-    }
 
     //  Close on exit
+    fclose(input_file_handle);
     munmap((void *)reg_map, REG_MAP_SIZE);
     close(fd_uio);
     munmap(src_buf, (size_t)size_src_buf);
     close(fd_buf0);
     munmap(dest_buf, (size_t)size_dest_buf);
     close(fd_buf1);
-    return (ok) ? 0 : 1;
+    return 0;
 }

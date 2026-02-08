@@ -40,7 +40,12 @@
 #define SRC_BUF_ID 0
 #define DEST_BUF_ID 1
 
-int DmaInit();
+enum DmaReturnValue
+{
+    DMA_RECEIVED,
+    DMA_TIMEOUT,
+    DMA_FAILED
+};
 
 int getPhyAddr(size_t buffer_index, uint64_t *phy_src_addr);
 int getBufSize(size_t buffer_index, uint64_t *size_src_buf);
@@ -48,4 +53,4 @@ void resetDmaChannel(volatile uint8_t const *reg_map, size_t buffer_index);
 void startDmaChannel(volatile uint8_t const *reg_map, size_t buffer_index);
 void setDmaChannelAddress(volatile uint8_t const *reg_map, size_t buffer_index, uint64_t phy_address);
 void setDmaTransmissionLength(volatile uint8_t const *reg_map, size_t buffer_index, uint32_t transmission_bytes);
-void waitDmaTransmissionDone(volatile uint8_t *regs, size_t buffer_index, uint8_t timeout_ms);
+int waitDmaTransmissionDone(volatile uint8_t *regs, size_t buffer_index, uint8_t timeout_ms);
