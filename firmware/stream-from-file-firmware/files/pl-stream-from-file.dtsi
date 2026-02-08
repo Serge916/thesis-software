@@ -1,0 +1,25 @@
+/ {
+    /* Add udmabuf nodes at the root */
+    fragment@3 {
+        target-path = "/";
+        __overlay__ {
+            udmabuf0: udmabuf@0 {
+                compatible = "ikwzm,u-dma-buf";
+                device-name = "udmabuf0";
+                minor-number = <0>;
+                size = <0x800>; //2kB
+                sync-mode = <1>;
+                sync-always;
+            };
+
+            udmabuf1: udmabuf@1 {
+                compatible = "ikwzm,u-dma-buf";
+                device-name = "udmabuf1";
+                minor-number = <1>;
+                size = <0x8000>; // 2kB per frame * 2 frames per sample * 8 frames per inference
+                sync-mode = <1>;
+                sync-always;
+            };
+        };
+    };
+};
