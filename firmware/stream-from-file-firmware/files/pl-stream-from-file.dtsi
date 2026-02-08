@@ -23,3 +23,11 @@
         };
     };
 };
+
+&debug_bridge_0 {
+        compatible = "xlnx,xvc";
+};
+
+&axi_dma_0{
+    compatible = "generic-uio";
+};
