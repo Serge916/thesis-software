@@ -1,22 +1,5 @@
-#define _GNU_SOURCE
-#include <stdlib.h>
-#include <stdio.h>
-#include <sys/mman.h>
-#include <stdint.h>
-#include <fcntl.h>
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <stdbool.h>
-#include <stdbool.h>
-
 #include "dma-api.h"
 #include "helper.h"
-
-static inline uint64_t bswap64(uint64_t x)
-{
-    return __builtin_bswap64(x);
-}
 
 int main(int argc, char *argv[])
 {
@@ -148,7 +131,7 @@ int main(int argc, char *argv[])
     setDmaChannelAddress(reg_map, SRC_BUF_ID, phy_src_addr);
     // Trigger receive DMA
     printf("Receive DMA channel triggered\n");
-    setDmaTransmissionLength(reg_map, DEST_BUF_ID, FRAME_SIZE_IN_BYTES);
+    setDmaTransmissionLength(reg_map, DEST_BUF_ID, BYTES_PER_RECEIVE_TRANSMISSION);
 
     while (!finished_operation)
     {
@@ -172,14 +155,14 @@ int main(int argc, char *argv[])
                 finished_transmitting = true;
                 break;
             }
-            // printf("DEBUG: Read line %d, %s\n", lineno, line_buf);
+            printf("DEBUG: Read line %d, %s\n", lineno, line_buf);
             if (parseLine(line_buf, bytes) != 0)
             {
                 fprintf(stderr, "Line %d: invalid hex digit\n", lineno);
                 finished_transmitting = true;
                 break;
             }
-            // printf("Line %d parsed,", lineno);
+            printf("Line %d parsed,", lineno);
             for (size_t i = 0; i < BYTES_PER_LINE - 1; i++)
             {
                 printf(" %02x", bytes[i]);
@@ -211,7 +194,7 @@ int main(int argc, char *argv[])
             // Update destination address
             frames_received++;
             frames_received %= 8;
-            printf("Transmit DMA channel finished, received frames: %u\n", frames_received);
+            printf("Receive DMA channel finished, received frames: %u\n", frames_received);
 
             // Enough frames for one forwarding
             if (frames_received == 0)
@@ -219,7 +202,8 @@ int main(int argc, char *argv[])
                 network_trigger_counter++;
             }
             // Update destination address
-            setDmaChannelAddress(reg_map, DEST_BUF_ID, (phy_dest_addr + frames_received * FRAME_SIZE_IN_BYTES));
+            setDmaChannelAddress(reg_map, DEST_BUF_ID, (phy_dest_addr + frames_received * BYTES_PER_RECEIVE_TRANSMISSION));
+            setDmaTransmissionLength(reg_map, DEST_BUF_ID, BYTES_PER_RECEIVE_TRANSMISSION);
         }
 
         if (!transmit_slot_available)

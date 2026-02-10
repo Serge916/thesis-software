@@ -1,3 +1,6 @@
+#ifndef _DMA_API_H
+#define _DMA_API_H 1
+
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
@@ -54,3 +57,5 @@ void startDmaChannel(volatile uint8_t const *reg_map, size_t buffer_index);
 void setDmaChannelAddress(volatile uint8_t const *reg_map, size_t buffer_index, uint64_t phy_address);
 void setDmaTransmissionLength(volatile uint8_t const *reg_map, size_t buffer_index, uint32_t transmission_bytes);
 int waitDmaTransmissionDone(volatile uint8_t *regs, size_t buffer_index, uint8_t timeout_ms);
+
+#endif
