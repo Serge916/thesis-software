@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 #define FRAME_SIZE_IN_BYTES 2048
 #define BYTES_PER_RECEIVE_TRANSMISSION FRAME_SIZE_IN_BYTES * 2

@@ -25,12 +25,26 @@ int main(int argc, char *argv[])
     bool finished_operation = false;
     bool finished_transmitting = false;
     bool transmit_slot_available = true;
+    size_t frame_index = 0;
     uint64_t frames_received = 0;
 
-    if (argc != 2)
+    if (argc < 2 || argc > 3)
     {
-        printf("Invalid use. Function expects: stream-from-file <path to input file>\n");
+        printf("Invalid use. Function expects: stream-from-file <path to input file> [visualizer PID]\n");
         exit(1);
+    }
+
+    pid_t pid = -1; // means "not provided"
+    if (argc == 3)
+    {
+        char *end = NULL;
+        long v = strtol(argv[2], &end, 10);
+        if (end == argv[2] || *end != '\0' || v <= 0)
+        {
+            fprintf(stderr, "Invalid PID: %s\n", argv[2]);
+            return 1;
+        }
+        pid = (pid_t)v;
     }
 
     input_file_handle = fopen(argv[1], "r");
@@ -155,19 +169,19 @@ int main(int argc, char *argv[])
                 finished_transmitting = true;
                 break;
             }
-            printf("DEBUG: Read line %d, %s\n", lineno, line_buf);
+            // printf("DEBUG: Read line %d, %s\n", lineno, line_buf);
             if (parseLine(line_buf, bytes) != 0)
             {
                 fprintf(stderr, "Line %d: invalid hex digit\n", lineno);
                 finished_transmitting = true;
                 break;
             }
-            printf("Line %d parsed,", lineno);
-            for (size_t i = 0; i < BYTES_PER_LINE - 1; i++)
-            {
-                printf(" %02x", bytes[i]);
-            }
-            printf(" %02x\n", bytes[BYTES_PER_LINE - 1]);
+            // printf("DEBUG: Line %d parsed,", lineno);
+            // for (size_t i = 0; i < BYTES_PER_LINE - 1; i++)
+            // {
+            //     printf(" %02x", bytes[i]);
+            // }
+            // printf(" %02x\n", bytes[BYTES_PER_LINE - 1]);
 
             memcpy(&src_buf[lines_read * BYTES_PER_LINE], bytes, BYTES_PER_LINE);
             lines_read++;
@@ -175,10 +189,10 @@ int main(int argc, char *argv[])
         // Copy into the DMA source buffer
         if (lines_read > 0)
         {
-            printf("DEBUG: Line %d copied\n", lineno);
+            // printf("DEBUG: Line %d copied\n", lineno);
             transmit_slot_available = false;
             setDmaTransmissionLength(reg_map, SRC_BUF_ID, transmission_bytes);
-            printf("DEBUG: Transmit DMA channel triggered\n");
+            // printf("DEBUG: Transmit DMA channel triggered\n");
         }
 
         // if (lines_read == 0 && !finished_transmitting)
@@ -192,17 +206,27 @@ int main(int argc, char *argv[])
         if (waitDmaTransmissionDone(reg_map, DEST_BUF_ID, 10) == DMA_RECEIVED)
         {
             // Update destination address
+            frame_index++;
+            frame_index %= 8;
             frames_received++;
-            frames_received %= 8;
-            printf("Receive DMA channel finished, received frames: %u\n", frames_received);
+            printf("Receive DMA channel finished, frame index, total frames: %u, %" PRIu64 "\n", frame_index, frames_received);
+
+            if (pid > 0)
+            {
+                if (kill(pid, SIGUSR1) != 0)
+                {
+                    perror("kill");
+                    return 1;
+                }
+            }
 
             // Enough frames for one forwarding
-            if (frames_received == 0)
+            if (frame_index == 0)
             {
                 network_trigger_counter++;
             }
             // Update destination address
-            setDmaChannelAddress(reg_map, DEST_BUF_ID, (phy_dest_addr + frames_received * BYTES_PER_RECEIVE_TRANSMISSION));
+            setDmaChannelAddress(reg_map, DEST_BUF_ID, (phy_dest_addr + frame_index * BYTES_PER_RECEIVE_TRANSMISSION));
             setDmaTransmissionLength(reg_map, DEST_BUF_ID, BYTES_PER_RECEIVE_TRANSMISSION);
         }
 
@@ -211,7 +235,7 @@ int main(int argc, char *argv[])
             if (waitDmaTransmissionDone(reg_map, SRC_BUF_ID, 10) == DMA_RECEIVED)
             {
                 // One more transmission
-                printf("Transmit DMA channel finished\n");
+                // printf("DEBUG: Transmit DMA channel finished\n");
                 transmit_slot_available = true;
             }
         }
