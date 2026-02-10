@@ -13,6 +13,11 @@
 #include "dma-api.h"
 #include "helper.h"
 
+static inline uint64_t bswap64(uint64_t x)
+{
+    return __builtin_bswap64(x);
+}
+
 int main(int argc, char *argv[])
 {
     const char *udmabuf0_dev = "/dev/udmabuf0";
@@ -63,7 +68,7 @@ int main(int argc, char *argv[])
     printf("Buffer sizes are:\nSource: %d B, Destination: %d B\n",
            size_src_buf, size_dest_buf);
 
-    if ((phy_src_addr == NULL) || (phy_dest_addr == NULL))
+    if ((&phy_src_addr == NULL) || (&phy_dest_addr == NULL))
     {
         fprintf(stderr, "Failed to get a valid address.\n");
         exit(1);
@@ -181,12 +186,12 @@ int main(int argc, char *argv[])
             }
             printf(" %02x\n", bytes[BYTES_PER_LINE - 1]);
 
+            memcpy(&src_buf[lines_read * BYTES_PER_LINE], bytes, BYTES_PER_LINE);
             lines_read++;
         }
         // Copy into the DMA source buffer
         if (lines_read > 0)
         {
-            memcpy(&src_buf[lines_read * BYTES_PER_LINE], bytes, BYTES_PER_LINE);
             printf("DEBUG: Line %d copied\n", lineno);
             transmit_slot_available = false;
             setDmaTransmissionLength(reg_map, SRC_BUF_ID, transmission_bytes);
@@ -206,6 +211,7 @@ int main(int argc, char *argv[])
             // Update destination address
             frames_received++;
             frames_received %= 8;
+            printf("Transmit DMA channel finished, received frames: %u\n", frames_received);
 
             // Enough frames for one forwarding
             if (frames_received == 0)

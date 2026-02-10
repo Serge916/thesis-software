@@ -48,7 +48,7 @@ enum DmaReturnValue
 };
 
 int getPhyAddr(size_t buffer_index, uint64_t *phy_src_addr);
-int getBufSize(size_t buffer_index, uint64_t *size_src_buf);
+int getBufSize(size_t buffer_index, uint32_t *size_src_buf);
 void resetDmaChannel(volatile uint8_t const *reg_map, size_t buffer_index);
 void startDmaChannel(volatile uint8_t const *reg_map, size_t buffer_index);
 void setDmaChannelAddress(volatile uint8_t const *reg_map, size_t buffer_index, uint64_t phy_address);
