@@ -1,6 +1,8 @@
 #include "dma-api.h"
 #include "helper.h"
 
+#include <inttypes.h>
+
 int main(int argc, char *argv[])
 {
     const char *udmabuf0_dev = "/dev/udmabuf0";
