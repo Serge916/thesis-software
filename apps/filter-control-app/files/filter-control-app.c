@@ -15,6 +15,9 @@
 
 #include "filter-constants.h"
 
+#define DECAY_INCREMENT 10000u
+#define SPIKE_INCREMENT 100u
+
 void print_unicode_divider(const char *ch)
 {
     struct winsize w;
@@ -129,16 +132,20 @@ int main(int argc, char **argv)
     }
     print_unicode_divider("-");
     printf("This script controls the parameters of the Neural Filter.\n"
-           "To control the Spike Counter Limit, press (+) to increase it, press (-) to decrease it.\n"
-           "Press Ctrl+C to exit cleanly.\n");
+           "Spike Counter Limit: (+) increase, (-) decrease.\n"
+           "Decay Counter Limit: (p) increase, (l) decrease.\n"
+           "Press Ctrl+C (or q) to exit cleanly.\n");
     print_unicode_divider("-");
 
     /* Register pointer to the 32-bit register at SPIKE_COUNTER_LIMIT_OFFSET */
     volatile uint32_t *spike_limit_reg =
         (volatile uint32_t *)(g_reg_map + SPIKE_COUNTER_LIMIT_OFFSET);
 
-    /* Optional: show current value once at start */
+    volatile uint32_t *decay_limit_reg =
+        (volatile uint32_t *)(g_reg_map + DECAY_COUNTER_LIMIT_OFFSET);
+
     printf("Current SPIKE_COUNTER_LIMIT = %u\n", (unsigned)*spike_limit_reg);
+    printf("Current DECAY_COUNTER_LIMIT = %u\n", (unsigned)*decay_limit_reg);
 
     while (!g_stop)
     {
@@ -170,43 +177,62 @@ int main(int argc, char **argv)
                 continue;
 
             /* read offset SPIKE_COUNTER_LIMIT_OFFSET */
-            uint32_t cur = *spike_limit_reg;
-            uint32_t next = cur;
+            uint32_t curSpike = *spike_limit_reg;
+            uint32_t nextSpike = curSpike;
+            uint32_t curDecay = *decay_limit_reg;
+            uint32_t nextDecay = curDecay;
 
             /* if +, increase by 100 (decimal) */
             if (ch == '+')
             {
-                if (cur > UINT32_MAX - 100u)
-                    next = UINT32_MAX;
+                if (curSpike > UINT32_MAX - SPIKE_INCREMENT)
+                    nextSpike = UINT32_MAX;
                 else
-                    next = cur + 100u;
+                    nextSpike = curSpike + SPIKE_INCREMENT;
             }
             /* if -, decrease by 100 (decimal) */
             else if (ch == '-')
             {
-                if (cur < 100u)
-                    next = 0u;
+                if (curSpike < SPIKE_INCREMENT)
+                    nextSpike = 0u;
                 else
-                    next = cur - 100u;
+                    nextSpike = curSpike - SPIKE_INCREMENT;
+            }
+            else if (ch == 'p' || ch == 'P')
+            {
+                /* pressing p increments by 100 offset DECAY_COUNTER_LIMIT_OFFSET */
+                if (curDecay > UINT32_MAX - DECAY_INCREMENT)
+                    nextDecay = UINT32_MAX;
+                else
+                    nextDecay = curDecay + DECAY_INCREMENT;
+            }
+            else if (ch == 'l' || ch == 'L')
+            {
+                /* pressing l decrements it by 100 */
+                if (curDecay < DECAY_INCREMENT)
+                    nextDecay = 0u;
+                else
+                    nextDecay = curDecay - DECAY_INCREMENT;
             }
             else if (ch == 'q' || ch == 'Q')
             {
-                /* handy extra exit */
                 g_stop = 1;
                 continue;
             }
             else
             {
-                continue; /* ignore other keys */
+                continue;
             }
 
             /* guard the value between 0 and UINT32_MAX (done above) */
-            if (next != cur)
+            if (nextSpike != curSpike || nextDecay != curDecay)
             {
-                *spike_limit_reg = next;
+                *spike_limit_reg = nextSpike;
+                *decay_limit_reg = nextDecay;
                 /* read back once (helps with posted writes on some buses) */
-                uint32_t verify = *spike_limit_reg;
-                printf("\rSPIKE_COUNTER_LIMIT = %-10u", (unsigned)verify);
+                uint32_t verifySpike = *spike_limit_reg;
+                uint32_t verifyDecay = *decay_limit_reg;
+                printf("\rSPIKE_COUNTER_LIMIT=%-10u  DECAY_COUNTER_LIMIT=%-10u", (unsigned)verifySpike, (unsigned)verifyDecay);
                 fflush(stdout);
             }
         }
