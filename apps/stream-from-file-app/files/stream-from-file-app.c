@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
     volatile uint8_t *reg_map;
 
     // 2048B is 128 lines, i.e. 2048/16.
-    char line_buf[16];
+    char line_buf[17];
     // 128 lines is 1024B, i.e. 128*8
     size_t transmission_bytes = 1024;
     size_t network_trigger_counter = 0;
@@ -30,20 +30,29 @@ int main(int argc, char *argv[])
     size_t frame_index = 0;
     uint64_t frames_received = 0;
 
-    if (argc < 2 || argc > 3)
+    if (argc < 2 || argc > 4)
     {
-        printf("Invalid use. Function expects: stream-from-file <path to input file> [visualizer PID]\n");
+        printf("Invalid use. Function expects: stream-from-file <path to input file> [visualizer PID] [--loop]\n");
         exit(1);
     }
 
     pid_t pid = -1; // means "not provided"
-    if (argc == 3)
+    bool loop_file = false;
+
+    for (int i = 2; i < argc; i++)
     {
-        char *end = NULL;
-        long v = strtol(argv[2], &end, 10);
-        if (end == argv[2] || *end != '\0' || v <= 0)
+        if (strcmp(argv[i], "--loop") == 0)
         {
-            fprintf(stderr, "Invalid PID: %s\n", argv[2]);
+            loop_file = true;
+            continue;
+        }
+
+        // otherwise treat it as PID
+        char *end = NULL;
+        long v = strtol(argv[i], &end, 10);
+        if (end == argv[i] || *end != '\0' || v <= 0)
+        {
+            fprintf(stderr, "Invalid arg: %s (expected PID or --loop)\n", argv[i]);
             return 1;
         }
         pid = (pid_t)v;
@@ -160,9 +169,20 @@ int main(int argc, char *argv[])
             int r = readNextLine(input_file_handle, line_buf, &lineno);
             if (r == 0)
             {
-                finished_transmitting = true;
-                printf("INFO: Finished sending events\n");
-                break; // EOF
+                if (loop_file)
+                {
+                    printf("INFO: Reached EOF, rewinding input and continuing\n");
+                    clearerr(input_file_handle);
+                    rewind(input_file_handle);
+                    lineno = 0; // optional
+                    continue;   // keep filling this chunk
+                }
+                else
+                {
+                    finished_transmitting = true;
+                    printf("INFO: Finished sending events\n");
+                    break; // original behavior
+                }
             }
 
             if (r < 0)
@@ -193,7 +213,7 @@ int main(int argc, char *argv[])
         {
             // printf("DEBUG: Line %d copied\n", lineno);
             transmit_slot_available = false;
-            setDmaTransmissionLength(reg_map, SRC_BUF_ID, transmission_bytes);
+            setDmaTransmissionLength(reg_map, SRC_BUF_ID, lines_read * BYTES_PER_LINE);
             // printf("DEBUG: Transmit DMA channel triggered\n");
         }
 
