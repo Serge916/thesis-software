@@ -34,4 +34,4 @@
 
 //&neuronMatrix_neuronMatrix_reg_bank_0: {
 //    compatible = "generic-uio";
-//};
+///};
