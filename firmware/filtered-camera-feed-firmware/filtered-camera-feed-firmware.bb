@@ -9,11 +9,14 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 
 inherit fpgamanager_dtg
 
-XSA_FILE = "filtered_camera_feed.xsa"
-SRC_URI = "file://${XSA_FILE}"
+XSA_FILE = "filtered-camera-feed.xsa"
+SRC_URI = "file://${XSA_FILE} \
+	file://load.sh \
+	file://pl-filtered-camera.dtsi"
 
 # Make sure the class uses the correct local XSA filename
 python () {
     d.setVar("XSCTH_HDF_PATH", d.getVar("XSA_FILE"))
 }
 RM_WORK_EXCLUDE += "${PN}"
+
