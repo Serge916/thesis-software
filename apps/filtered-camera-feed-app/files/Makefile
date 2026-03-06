@@ -1,7 +1,7 @@
-APP = stream-from-file-app
+APP = filtered-camera-feed-app
 
 # Add any other object files to this list below
-APP_OBJS = stream-from-file-app.o dma-api.o helper.o
+APP_OBJS = filtered-camera-feed-app.o dma-api.o helper.o
 
 all: build
 
