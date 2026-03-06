@@ -61,6 +61,10 @@ def decode_frame_bgr(raw4096: bytes, bitorder: str = "big") -> np.ndarray:
     bits0 = np.unpackbits(b0, bitorder=bitorder)[: W * H].reshape(H, W).astype(np.uint8)
     bits1 = np.unpackbits(b1, bitorder=bitorder)[: W * H].reshape(H, W).astype(np.uint8)
 
+    # Swap 64-bit halves within each row: [0:64] <-> [64:128]
+    bits0 = np.concatenate([bits0[:, 64:], bits0[:, :64]], axis=1)
+    bits1 = np.concatenate([bits1[:, 64:], bits1[:, :64]], axis=1)
+
     img = np.zeros((H, W, 3), dtype=np.uint8)  # BGR
     img[..., 0] = bits0 * 255  # Blue
     img[..., 2] = bits1 * 255  # Red
@@ -132,14 +136,6 @@ def main(dev_path="/dev/udmabuf1"):
                 key = cv2.waitKey(1) & 0xFF
                 if key in (27, ord("q")):
                     break
-                elif key == ord("b"):
-                    bitorder = "big"
-                    _refresh_requested = True
-                    print("bitorder=big")
-                elif key == ord("l"):
-                    bitorder = "little"
-                    _refresh_requested = True
-                    print("bitorder=little")
 
                 if cv2.getWindowProperty(win, cv2.WND_PROP_VISIBLE) == 0:
                     break
