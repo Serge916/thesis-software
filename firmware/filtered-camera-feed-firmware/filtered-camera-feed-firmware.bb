@@ -14,9 +14,17 @@ SRC_URI = "file://${XSA_FILE} \
 	file://load.sh \
 	file://pl-filtered-camera.dtsi"
 
+RDEPENDS:${PN} += "bash"
+
 # Make sure the class uses the correct local XSA filename
 python () {
     d.setVar("XSCTH_HDF_PATH", d.getVar("XSA_FILE"))
 }
-RM_WORK_EXCLUDE += "${PN}"
 
+do_install:append () {
+	install -d ${D}/${bindir}
+	install -m 0700 ${WORKDIR}/load.sh ${D}/${bindir}/load-${PN}.sh
+}
+FILES:${PN} += "${bindir}/load-${PN}.sh"
+
+RM_WORK_EXCLUDE += "${PN}"
