@@ -62,6 +62,32 @@
 	};
 };
 
+/ {
+    /* Add udmabuf nodes at the root */
+    fragment@4 {
+        target-path = "/";
+        __overlay__ {
+            udmabuf0: udmabuf@0 {
+                compatible = "ikwzm,u-dma-buf";
+                device-name = "udmabuf0";
+                minor-number = <0>;
+                size = <0x800>; //2kB
+                sync-mode = <1>;
+                sync-always;
+            };
+
+            udmabuf1: udmabuf@1 {
+                compatible = "ikwzm,u-dma-buf";
+                device-name = "udmabuf1";
+                minor-number = <1>;
+                size = <0x8000>; // 2kB per frame * 2 frames per sample * 8 frames per inference
+                sync-mode = <1>;
+                sync-always;
+            };
+        };
+    };
+};
+
 &ps_host_if_0 {
 	compatible = "psee,axi4s-packetizer";
 	dmas = <&axi_dma 1>;
@@ -169,4 +195,12 @@
 
 &mipi_csi_inmipi_csi2_rx_subsyst_0 {
 	remote-endpoint = <&imx636>;
+};
+
+&debug_bridge_0 {
+        compatible = "xlnx,xvc";
+};
+
+&axi_dma_0{
+    compatible = "generic-uio";
 };
